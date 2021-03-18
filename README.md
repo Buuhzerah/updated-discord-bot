@@ -1,2 +1,1 @@
 # updated-discord-bot
-## Yos.
