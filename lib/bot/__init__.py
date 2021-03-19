@@ -1,5 +1,6 @@
 from sqlite3.dbapi2 import Timestamp
 from apscheduler.triggers.cron import CronTrigger
+from discord.errors import HTTPException, Forbidden
 from discord.ext.commands import Bot as BotBase
 from discord.ext.commands import CommandNotFound
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -7,12 +8,17 @@ from discord import Intents, Embed
 from datetime import datetime
 from asyncio import sleep
 from glob import glob
+from discord.ext.commands.context import Context
+
+from discord.ext.commands.core import command
+from discord.ext.commands.errors import BadArgument, MissingRequiredArgument
 from ..db import db
 
 
 PREFIX = "+"
 OWNER_IDS = [208388659634765825]
 COGS = [path.split("\\")[-1][:-3] for path in glob("./lib/cogs/*.py")]
+IGNORED_EXCEPTIONS = (CommandNotFound, BadArgument, MissingRequiredArgument)
 
 
 class Ready(object):
@@ -61,6 +67,19 @@ class Bot(BotBase):
 		print('Bot carregando...')
 		super().run(self.TOKEN, reconnect=True)
 
+	'''async def process_commands(self, message):
+		return super().process_commands(message)'''
+
+	async def process_commands(self, message):
+		ctx = await self.get_context(message, cls=Context)
+
+		if ctx.command is not None and ctx.guild is not None:
+			if self.ready:
+				await self.invoke(ctx)
+
+			else:
+				await ctx.send("Não estou pronto para receber comandos por agora. Por favor, espere um pouco.")
+
 	async def rules_reminder(self):
 		channel = self.get_channel(821837723655471125)
 		await channel.send("Lembrar de mexer aqui depois kappa kappa. rules_reminder btw")
@@ -77,11 +96,17 @@ class Bot(BotBase):
 
 		else:
 			channel = self.get_channel(821837723655471125)
-			await channel.send("Oops, algo deu errado com o código.")
+			await self.stdout.send("Oops, algo deu errado com o código.")
 
 	async def on_command_error(self, cts, exc):
-		if isinstance(exc, CommandNotFound):
+		if any([isinstance(exc, error) for error in IGNORED_EXCEPTIONS]):
 			pass
+		elif isinstance(exc, MissingRequiredArgument):
+			await self.stdout.send("Um ou mais argumentos necessários faltando.")
+		elif isinstance(exc.original, HTTPException):
+			await self.stdout.send("Coloco algo aqui depois e.e'")
+		elif isinstance(exc.original, Forbidden):
+			await self.stfout.send("Não tenho permissão para fazer isso.")
 		elif hasattr(exc, "original"):
 			raise exc.original
 		else:
@@ -115,7 +140,8 @@ class Bot(BotBase):
 		else:
 			print('bot reconnected')
 	async def on_message(self, message):
-		pass
+		if not message.author.bot:
+			await self.process_commands(message)
 
 
 bot = Bot()
